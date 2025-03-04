@@ -1,0 +1,56 @@
+name: Deploy Next.js to cPanel
+
+on:
+  push:
+    branches:
+      - main  # Trigger deployment on push to the main branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 18  # Use the Node.js version required by your project
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build project
+        run: npm run build
+
+      - name: Install SSH key
+        uses: shimataro/ssh-key-action@v2
+        with:
+          key: ${{ secrets.CPANEL_SSH_KEY }}
+          known_hosts: "just-a-placeholder-so-we-dont-get-errors"
+
+      - name: Deploy to cPanel via SSH
+        run: |
+          # Remove existing files in the deployment directory
+          ssh -o StrictHostKeyChecking=no \
+              -i ${{ secrets.CPANEL_SSH_KEY }} \
+              ${{ secrets.CPANEL_USERNAME }}@${{ secrets.CPANEL_HOST }} \
+              "rm -rf ${{ secrets.CPANEL_DEPLOY_DIR }}/*"
+
+          # Copy the built files to the deployment directory
+          scp -o StrictHostKeyChecking=no \
+              -i ${{ secrets.CPANEL_SSH_KEY }} \
+              -r .next public package.json next.config.js ${{ secrets.CPANEL_USERNAME }}@${{ secrets.CPANEL_HOST }}:${{ secrets.CPANEL_DEPLOY_DIR }}
+
+          # Install dependencies on the server (if needed)
+          ssh -o StrictHostKeyChecking=no \
+              -i ${{ secrets.CPANEL_SSH_KEY }} \
+              ${{ secrets.CPANEL_USERNAME }}@${{ secrets.CPANEL_HOST }} \
+              "cd ${{ secrets.CPANEL_DEPLOY_DIR }} && npm install --production"
+
+          # Restart the Node.js server (if applicable)
+          # ssh -o StrictHostKeyChecking=no \
+          #     -i ${{ secrets.CPANEL_SSH_KEY }} \
+          #     ${{ secrets.CPANEL_USERNAME }}@${{ secrets.CPANEL_HOST }} \
+          #     "pm2 restart your-app-name"
